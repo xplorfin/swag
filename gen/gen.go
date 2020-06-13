@@ -8,7 +8,7 @@ import (
 	"io"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"text/template"
 	"time"
@@ -57,6 +57,9 @@ type Config struct {
 	// ParseDependencies whether swag should be parse outside dependency folder
 	ParseDependency bool
 
+	// ParseInternal whether swag should parse internal packages
+	ParseInternal bool
+
 	// MarkdownFilesDir used to find markdownfiles, which can be used for tag descriptions
 	MarkdownFilesDir string
 
@@ -82,6 +85,7 @@ func (g *Gen) Build(config *Config) error {
 	p.PropNamingStrategy = config.PropNamingStrategy
 	p.ParseVendor = config.ParseVendor
 	p.ParseDependency = config.ParseDependency
+	p.ParseInternal = config.ParseInternal
 
 	if err := p.ParseAPIInMultiDirs(searchDirs, config.MainAPIFile); err != nil {
 		return err
@@ -97,10 +101,14 @@ func (g *Gen) Build(config *Config) error {
 		return err
 	}
 
-	packageName := path.Base(config.OutputDir)
-	docFileName := path.Join(config.OutputDir, "docs.go")
-	jsonFileName := path.Join(config.OutputDir, "swagger.json")
-	yamlFileName := path.Join(config.OutputDir, "swagger.yaml")
+	absOutputDir, err := filepath.Abs(config.OutputDir)
+	if err != nil {
+		return err
+	}
+	packageName := filepath.Base(absOutputDir)
+	docFileName := filepath.Join(config.OutputDir, "docs.go")
+	jsonFileName := filepath.Join(config.OutputDir, "swagger.json")
+	yamlFileName := filepath.Join(config.OutputDir, "swagger.yaml")
 
 	docs, err := os.Create(docFileName)
 	if err != nil {
