@@ -1268,8 +1268,8 @@ func TestParseParamCommentByMinLength(t *testing.T) {
 	assert.Error(t, operation.ParseComment(comment, nil))
 }
 
-func TestParseParamCommentByMininum(t *testing.T) {
-	comment := `@Param some_id query int true "Some ID" Mininum(10)`
+func TestParseParamCommentByMinimum(t *testing.T) {
+	comment := `@Param some_id query int true "Some ID" Minimum(10)`
 	operation := NewOperation(nil)
 	err := operation.ParseComment(comment, nil)
 
@@ -1289,15 +1289,18 @@ func TestParseParamCommentByMininum(t *testing.T) {
 }`
 	assert.Equal(t, expected, string(b))
 
-	comment = `@Param some_id query string true "Some ID" Mininum(10)`
+	comment = `@Param some_id query int true "Some ID" Mininum(10)`
+	assert.NoError(t, operation.ParseComment(comment, nil))
+
+	comment = `@Param some_id query string true "Some ID" Minimum(10)`
 	assert.Error(t, operation.ParseComment(comment, nil))
 
-	comment = `@Param some_id query integer true "Some ID" Mininum(Goopher)`
+	comment = `@Param some_id query integer true "Some ID" Minimum(Goopher)`
 	assert.Error(t, operation.ParseComment(comment, nil))
 }
 
-func TestParseParamCommentByMaxinum(t *testing.T) {
-	comment := `@Param some_id query int true "Some ID" Maxinum(10)`
+func TestParseParamCommentByMaximum(t *testing.T) {
+	comment := `@Param some_id query int true "Some ID" Maximum(10)`
 	operation := NewOperation(nil)
 	err := operation.ParseComment(comment, nil)
 
@@ -1317,10 +1320,13 @@ func TestParseParamCommentByMaxinum(t *testing.T) {
 }`
 	assert.Equal(t, expected, string(b))
 
-	comment = `@Param some_id query string true "Some ID" Maxinum(10)`
+	comment = `@Param some_id query int true "Some ID" Maxinum(10)`
+	assert.NoError(t, operation.ParseComment(comment, nil))
+
+	comment = `@Param some_id query string true "Some ID" Maximum(10)`
 	assert.Error(t, operation.ParseComment(comment, nil))
 
-	comment = `@Param some_id query integer true "Some ID" Maxinum(Goopher)`
+	comment = `@Param some_id query integer true "Some ID" Maximum(Goopher)`
 	assert.Error(t, operation.ParseComment(comment, nil))
 
 }
@@ -1478,4 +1484,60 @@ func TestParseExtentions(t *testing.T) {
 		b, _ := json.MarshalIndent(operation, "", "    ")
 		assert.Equal(t, expected, string(b))
 	}
+
+	// Test x-tagGroups
+	{
+		comment := `@x-tagGroups [{"name":"Natural Persons","tags":["Person","PersonRisk","PersonDocuments"]}]`
+		operation := NewOperation(nil)
+
+		err := operation.ParseComment(comment, nil)
+		assert.NoError(t, err)
+
+		expected := `{
+    "x-tagGroups": [
+        {
+            "name": "Natural Persons",
+            "tags": [
+                "Person",
+                "PersonRisk",
+                "PersonDocuments"
+            ]
+        }
+    ]
+}`
+
+		b, _ := json.MarshalIndent(operation, "", "    ")
+		assert.Equal(t, expected, string(b))
+	}
+}
+
+func TestParseCodeSamples(t *testing.T) {
+	t.Run("Find sample by file", func(t *testing.T) {
+		comment := `@x-codeSamples file`
+		operation := NewOperation(nil, SetCodeExampleFilesDirectory("testdata/code_examples"))
+		operation.Summary = "example"
+
+		err := operation.ParseComment(comment, nil)
+		assert.NoError(t, err, "no error should be thrown")
+
+		b, _ := json.MarshalIndent(operation, "", "    ")
+
+		expected := `{
+    "summary": "example",
+    "x-codeSamples": {
+        "lang": "JavaScript",
+        "source": "console.log('Hello World');"
+    }
+}`
+		assert.Equal(t, expected, string(b))
+	})
+
+	t.Run("Example file not found", func(t *testing.T) {
+		comment := `@x-codeSamples file`
+		operation := NewOperation(nil, SetCodeExampleFilesDirectory("testdata/code_examples"))
+		operation.Summary = "exampel"
+
+		err := operation.ParseComment(comment, nil)
+		assert.Error(t, err, "error was expected, as file does not exist")
+	})
 }

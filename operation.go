@@ -6,8 +6,10 @@ import (
 	"go/ast"
 	goparser "go/parser"
 	"go/token"
+	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -24,7 +26,8 @@ type Operation struct {
 	Path       string
 	spec.Operation
 
-	parser *Parser
+	parser              *Parser
+	codeExampleFilesDir string
 }
 
 var mimeTypeAliases = map[string]string{
@@ -46,16 +49,33 @@ var mimeTypePattern = regexp.MustCompile("^[^/]+/[^/]+$")
 
 // NewOperation creates a new Operation with default properties.
 // map[int]Response
-func NewOperation(parser *Parser) *Operation {
+func NewOperation(parser *Parser, options ...func(*Operation)) *Operation {
 	if parser == nil {
 		parser = New()
 	}
-	return &Operation{
+
+	result := &Operation{
 		parser:     parser,
 		HTTPMethod: "get",
 		Operation: spec.Operation{
 			OperationProps: spec.OperationProps{},
+			VendorExtensible: spec.VendorExtensible{
+				Extensions: spec.Extensions{},
+			},
 		},
+	}
+
+	for _, option := range options {
+		option(result)
+	}
+
+	return result
+}
+
+// SetCodeExampleFilesDirectory sets the directory to search for codeExamples
+func SetCodeExampleFilesDirectory(directoryPath string) func(*Operation) {
+	return func(o *Operation) {
+		o.codeExampleFilesDir = directoryPath
 	}
 }
 
@@ -101,11 +121,34 @@ func (operation *Operation) ParseComment(comment string, astFile *ast.File) erro
 		err = operation.ParseSecurityComment(lineRemainder)
 	case "@deprecated":
 		operation.Deprecate()
+	case "@x-codesamples":
+		err = operation.ParseCodeSample(attribute, commentLine, lineRemainder)
 	default:
 		err = operation.ParseMetadata(attribute, lowerAttribute, lineRemainder)
 	}
-
 	return err
+}
+
+// ParseCodeSample godoc
+func (operation *Operation) ParseCodeSample(attribute, commentLine, lineRemainder string) error {
+	if lineRemainder == "file" {
+		data, err := getCodeExampleForSummary(operation.Summary, operation.codeExampleFilesDir)
+		if err != nil {
+			return err
+		}
+
+		var valueJSON interface{}
+		if err := json.Unmarshal(data, &valueJSON); err != nil {
+			return fmt.Errorf("annotation %s need a valid json value", attribute)
+		}
+
+		operation.Extensions[attribute[1:]] = valueJSON // don't use the method provided by spec lib, cause it will call toLower() on attribute names, which is wrongy
+
+		return nil
+	}
+
+	// Fallback into existing logic
+	return operation.ParseMetadata(attribute, strings.ToLower(attribute), lineRemainder)
 }
 
 // ParseDescriptionComment godoc
@@ -129,7 +172,8 @@ func (operation *Operation) ParseMetadata(attribute, lowerAttribute, lineRemaind
 		if err := json.Unmarshal([]byte(lineRemainder), &valueJSON); err != nil {
 			return fmt.Errorf("annotation %s need a valid json value", attribute)
 		}
-		operation.Operation.AddExtension(attribute[1:], valueJSON) // Trim "@" at head
+
+		operation.Extensions[attribute[1:]] = valueJSON // don't use the method provided by spec lib, cause it will call toLower() on attribute names, which is wrongy
 	}
 	return nil
 }
@@ -167,12 +211,12 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 	param := createParameter(paramType, description, name, refType, required)
 
 	switch paramType {
-	case "path", "header", "formData":
+	case "path", "header":
 		switch objectType {
 		case ARRAY, OBJECT:
 			return fmt.Errorf("%s is not supported type for %s", refType, paramType)
 		}
-	case "query":
+	case "query", "formData":
 		switch objectType {
 		case ARRAY:
 			if !IsPrimitiveType(refType) {
@@ -203,13 +247,17 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 				}
 				return false
 			}
-			orderedNames := make([]string, 0, len(schema.Properties))
-			for k := range schema.Properties {
-				orderedNames = append(orderedNames, k)
+			items := make(spec.OrderSchemaItems, 0, len(schema.Properties))
+			for k, v := range schema.Properties {
+				items = append(items, spec.OrderSchemaItem{
+					Name:   k,
+					Schema: v,
+				})
 			}
-			sort.Strings(orderedNames)
-			for _, name := range orderedNames {
-				prop := schema.Properties[name]
+			sort.Sort(items)
+			for _, item := range items {
+				name := item.Name
+				prop := item.Schema
 				if len(prop.Type) == 0 {
 					continue
 				}
@@ -274,11 +322,11 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 var regexAttributes = map[string]*regexp.Regexp{
 	// for Enums(A, B)
 	"enums": regexp.MustCompile(`(?i)\s+enums\(.*\)`),
-	// for Minimum(0)
-	"maxinum": regexp.MustCompile(`(?i)\s+maxinum\(.*\)`),
-	// for Maximum(0)
-	"mininum": regexp.MustCompile(`(?i)\s+mininum\(.*\)`),
-	// for Maximum(0)
+	// for maximum(0)
+	"maximum": regexp.MustCompile(`(?i)\s+maxinum|maximum\(.*\)`),
+	// for minimum(0)
+	"minimum": regexp.MustCompile(`(?i)\s+mininum|minimum\(.*\)`),
+	// for default(0)
 	"default": regexp.MustCompile(`(?i)\s+default\(.*\)`),
 	// for minlength(0)
 	"minlength": regexp.MustCompile(`(?i)\s+minlength\(.*\)`),
@@ -303,13 +351,13 @@ func (operation *Operation) parseAndExtractionParamAttribute(commentLine, object
 			if err != nil {
 				return err
 			}
-		case "maxinum":
+		case "maximum":
 			n, err := setNumberParam(attrKey, schemaType, attr, commentLine)
 			if err != nil {
 				return err
 			}
 			param.Maximum = &n
-		case "mininum":
+		case "minimum":
 			n, err := setNumberParam(attrKey, schemaType, attr, commentLine)
 			if err != nil {
 				return err
@@ -846,4 +894,32 @@ func createParameter(paramType, description, paramName, schemaType string, requi
 		},
 	}
 	return parameter
+}
+
+func getCodeExampleForSummary(summaryName string, dirPath string) ([]byte, error) {
+	filesInfos, err := ioutil.ReadDir(dirPath)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, fileInfo := range filesInfos {
+		if fileInfo.IsDir() {
+			continue
+		}
+		fileName := fileInfo.Name()
+
+		if !strings.Contains(fileName, ".json") {
+			continue
+		}
+
+		if strings.Contains(fileName, summaryName) {
+			fullPath := filepath.Join(dirPath, fileName)
+			commentInfo, err := ioutil.ReadFile(fullPath)
+			if err != nil {
+				return nil, fmt.Errorf("Failed to read code example file %s error: %s ", fullPath, err)
+			}
+			return commentInfo, nil
+		}
+	}
+	return nil, fmt.Errorf("Unable to find code example file for tag %s in the given directory", summaryName)
 }

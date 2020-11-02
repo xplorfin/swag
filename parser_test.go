@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const defaultParseDepth = 100
+
 func TestNew(t *testing.T) {
 	swagMode = test
 	New()
@@ -37,7 +39,12 @@ func TestParser_ParseGeneralApiInfo(t *testing.T) {
             "name": "Apache 2.0",
             "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
         },
-        "version": "1.0"
+        "version": "1.0",
+        "x-logo": {
+            "altText": "Petstore logo",
+            "backgroundColor": "#FFFFFF",
+            "url": "https://redocly.github.io/redoc/petstore-logo.png"
+        }
     },
     "host": "petstore.swagger.io",
     "basePath": "/v2",
@@ -58,7 +65,8 @@ func TestParser_ParseGeneralApiInfo(t *testing.T) {
             "tokenUrl": "https://example.com/oauth/token",
             "scopes": {
                 "admin": " Grants read and write access to administrative information"
-            }
+            },
+            "x-tokenName": "id_token"
         },
         "OAuth2Application": {
             "type": "oauth2",
@@ -222,7 +230,6 @@ func TestParser_ParseGeneralApiInfoWithOpsInSameFile(t *testing.T) {
         "title": "Swagger Example API",
         "termsOfService": "http://swagger.io/terms/",
         "contact": {},
-        "license": {},
         "version": "1.0"
     },
     "paths": {}
@@ -262,8 +269,9 @@ func TestParser_ParseType(t *testing.T) {
 	err := p.getAllGoFileInfo("testdata", searchDir)
 	assert.NoError(t, err)
 
-	p.packages.ParseTypes()
+	_, err = p.packages.ParseTypes()
 
+	assert.NoError(t, err)
 	assert.NotNil(t, p.packages.uniqueDefinitions["api.Pet3"])
 	assert.NotNil(t, p.packages.uniqueDefinitions["web.Pet"])
 	assert.NotNil(t, p.packages.uniqueDefinitions["web.Pet2"])
@@ -282,7 +290,7 @@ func TestParseSimpleApi1(t *testing.T) {
 	mainAPIFile := "main.go"
 	p := New()
 	p.PropNamingStrategy = PascalCase
-	err = p.ParseAPI(searchDir, mainAPIFile)
+	err = p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	assert.NoError(t, err)
 
 	b, _ := json.MarshalIndent(p.swagger, "", "  ")
@@ -765,7 +773,7 @@ func TestParseSimpleApi_ForSnakecase(t *testing.T) {
 	mainAPIFile := "main.go"
 	p := New()
 	p.PropNamingStrategy = SnakeCase
-	err := p.ParseAPI(searchDir, mainAPIFile)
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	assert.NoError(t, err)
 
 	b, _ := json.MarshalIndent(p.swagger, "", "    ")
@@ -1220,7 +1228,7 @@ func TestParseSimpleApi_ForLowerCamelcase(t *testing.T) {
 	searchDir := "testdata/simple3"
 	mainAPIFile := "main.go"
 	p := New()
-	err := p.ParseAPI(searchDir, mainAPIFile)
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	assert.NoError(t, err)
 
 	b, _ := json.MarshalIndent(p.swagger, "", "    ")
@@ -1234,7 +1242,6 @@ func TestParseStructComment(t *testing.T) {
         "description": "This is a sample server Petstore server.",
         "title": "Swagger Example API",
         "contact": {},
-        "license": {},
         "version": "1.0"
     },
     "host": "localhost:4000",
@@ -1310,7 +1317,7 @@ func TestParseStructComment(t *testing.T) {
 	searchDir := "testdata/struct_comment"
 	mainAPIFile := "main.go"
 	p := New()
-	err := p.ParseAPI(searchDir, mainAPIFile)
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	assert.NoError(t, err)
 	b, _ := json.MarshalIndent(p.swagger, "", "    ")
 	assert.Equal(t, expected, string(b))
@@ -1323,7 +1330,6 @@ func TestParseNonExportedJSONFields(t *testing.T) {
         "description": "This is a sample server.",
         "title": "Swagger Example API",
         "contact": {},
-        "license": {},
         "version": "1.0"
     },
     "host": "localhost:4000",
@@ -1385,7 +1391,7 @@ func TestParseNonExportedJSONFields(t *testing.T) {
 	searchDir := "testdata/non_exported_json_fields"
 	mainAPIFile := "main.go"
 	p := New()
-	err := p.ParseAPI(searchDir, mainAPIFile)
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	assert.NoError(t, err)
 	b, _ := json.MarshalIndent(p.swagger, "", "    ")
 	assert.Equal(t, expected, string(b))
@@ -1418,7 +1424,7 @@ func TestParsePetApi(t *testing.T) {
 	searchDir := "testdata/pet"
 	mainAPIFile := "main.go"
 	p := New()
-	err := p.ParseAPI(searchDir, mainAPIFile)
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	assert.NoError(t, err)
 	b, _ := json.MarshalIndent(p.swagger, "", "    ")
 	assert.Equal(t, expected, string(b))
@@ -1487,7 +1493,7 @@ func TestParseModelAsTypeAlias(t *testing.T) {
 	searchDir := "testdata/alias_type"
 	mainAPIFile := "main.go"
 	p := New()
-	err := p.ParseAPI(searchDir, mainAPIFile)
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	assert.NoError(t, err)
 
 	b, _ := json.MarshalIndent(p.swagger, "", "    ")
@@ -1498,7 +1504,7 @@ func TestParseComposition(t *testing.T) {
 	searchDir := "testdata/composition"
 	mainAPIFile := "main.go"
 	p := New()
-	err := p.ParseAPI(searchDir, mainAPIFile)
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	assert.NoError(t, err)
 
 	expected, err := ioutil.ReadFile(filepath.Join(searchDir, "expected.json"))
@@ -1514,7 +1520,7 @@ func TestParseImportAliases(t *testing.T) {
 	searchDir := "testdata/alias_import"
 	mainAPIFile := "main.go"
 	p := New()
-	err := p.ParseAPI(searchDir, mainAPIFile)
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	assert.NoError(t, err)
 
 	expected, err := ioutil.ReadFile(filepath.Join(searchDir, "expected.json"))
@@ -1530,7 +1536,7 @@ func TestParseNested(t *testing.T) {
 	mainAPIFile := "main.go"
 	p := New()
 	p.ParseDependency = true
-	err := p.ParseAPI(searchDir, mainAPIFile)
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	assert.NoError(t, err)
 
 	expected, err := ioutil.ReadFile(filepath.Join(searchDir, "expected.json"))
@@ -1545,7 +1551,7 @@ func TestParseDuplicated(t *testing.T) {
 	mainAPIFile := "main.go"
 	p := New()
 	p.ParseDependency = true
-	err := p.ParseAPI(searchDir, mainAPIFile)
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	assert.Errorf(t, err, "duplicated @id declarations successfully found")
 }
 
@@ -1554,7 +1560,7 @@ func TestParseConflictSchemaName(t *testing.T) {
 	mainAPIFile := "main.go"
 	p := New()
 	p.ParseDependency = true
-	err := p.ParseAPI(searchDir, mainAPIFile)
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	assert.NoError(t, err)
 	b, _ := json.MarshalIndent(p.swagger, "", "    ")
 	expected, err := ioutil.ReadFile(filepath.Join(searchDir, "expected.json"))
@@ -1686,7 +1692,8 @@ type ResponseWrapper struct {
 	assert.NoError(t, err)
 	parser.packages.CollectAstFile("rest", "rest/rest.go", f2)
 
-	parser.packages.ParseTypes()
+	_, err = parser.packages.ParseTypes()
+	assert.NoError(t, err)
 
 	err = parser.ParseRouterAPIInfo("", f)
 	assert.NoError(t, err)
@@ -1871,7 +1878,8 @@ func Test(){
 	p := New()
 	p.packages.CollectAstFile("api", "api/api.go", f)
 
-	p.packages.ParseTypes()
+	_, err = p.packages.ParseTypes()
+	assert.NoError(t, err)
 
 	err = p.ParseRouterAPIInfo("", f)
 	assert.NoError(t, err)
@@ -2104,7 +2112,7 @@ func Test3(){
 // 			for i := 0; i < 100; i++ {
 // 				p := New()
 // 				p.PropNamingStrategy = PascalCase
-// 				err := p.ParseAPI(searchDir, mainAPIFile)
+// 				err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 // 				b, _ := json.MarshalIndent(p.swagger, "", "    ")
 // 				assert.NotEqual(t, "", string(b))
 
@@ -2123,7 +2131,7 @@ func TestApiParseTag(t *testing.T) {
 	mainAPIFile := "main.go"
 	p := New(SetMarkdownFileDirectory(searchDir))
 	p.PropNamingStrategy = PascalCase
-	err := p.ParseAPI(searchDir, mainAPIFile)
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	assert.NoError(t, err)
 
 	if len(p.swagger.Tags) != 3 {
@@ -2147,12 +2155,21 @@ func TestApiParseTag(t *testing.T) {
 	}
 }
 
+func TestApiParseTag_NonExistendTag(t *testing.T) {
+	searchDir := "testdata/tags_nonexistend_tag"
+	mainAPIFile := "main.go"
+	p := New(SetMarkdownFileDirectory(searchDir))
+	p.PropNamingStrategy = PascalCase
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
+	assert.Error(t, err)
+}
+
 func TestParseTagMarkdownDescription(t *testing.T) {
 	searchDir := "testdata/tags"
 	mainAPIFile := "main.go"
 	p := New(SetMarkdownFileDirectory(searchDir))
 	p.PropNamingStrategy = PascalCase
-	err := p.ParseAPI(searchDir, mainAPIFile)
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	if err != nil {
 		t.Error("Failed to parse api description: " + err.Error())
 	}
@@ -2172,7 +2189,7 @@ func TestParseApiMarkdownDescription(t *testing.T) {
 	mainAPIFile := "main.go"
 	p := New(SetMarkdownFileDirectory(searchDir))
 	p.PropNamingStrategy = PascalCase
-	err := p.ParseAPI(searchDir, mainAPIFile)
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	if err != nil {
 		t.Error("Failed to parse api description: " + err.Error())
 	}
@@ -2186,7 +2203,7 @@ func TestIgnoreInvalidPkg(t *testing.T) {
 	searchDir := "testdata/deps_having_invalid_pkg"
 	mainAPIFile := "main.go"
 	p := New()
-	if err := p.ParseAPI(searchDir, mainAPIFile); err != nil {
+	if err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth); err != nil {
 		t.Error("Failed to ignore valid pkg: " + err.Error())
 	}
 }
@@ -2196,7 +2213,7 @@ func TestFixes432(t *testing.T) {
 	mainAPIFile := "cmd/main.go"
 
 	p := New()
-	if err := p.ParseAPI(searchDir, mainAPIFile); err != nil {
+	if err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth); err != nil {
 		t.Error("Failed to ignore valid pkg: " + err.Error())
 	}
 }
@@ -2207,7 +2224,7 @@ func TestParseOutsideDependencies(t *testing.T) {
 
 	p := New()
 	p.ParseDependency = true
-	if err := p.ParseAPI(searchDir, mainAPIFile); err != nil {
+	if err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth); err != nil {
 		t.Error("Failed to parse api: " + err.Error())
 	}
 }
@@ -2232,8 +2249,7 @@ func Fun()  {
 `
 	expected := `{
     "info": {
-        "contact": {},
-        "license": {}
+        "contact": {}
     },
     "paths": {
         "/test": {
@@ -2271,7 +2287,10 @@ func Fun()  {
 
 	p := New()
 	p.packages.CollectAstFile("api", "api/api.go", f)
-	p.packages.ParseTypes()
+
+	_, err = p.packages.ParseTypes()
+	assert.NoError(t, err)
+
 	err = p.ParseRouterAPIInfo("", f)
 	assert.NoError(t, err)
 
@@ -2304,7 +2323,9 @@ func Fun()  {
 
 	p := New()
 	p.packages.CollectAstFile("api", "api/api.go", f)
-	p.packages.ParseTypes()
+	_, err = p.packages.ParseTypes()
+	assert.NoError(t, err)
+
 	err = p.ParseRouterAPIInfo("", f)
 	assert.NoError(t, err)
 
@@ -2316,6 +2337,7 @@ func Fun()  {
 	_, ok = p.swagger.Definitions["Student"]
 	assert.True(t, ok)
 	path, ok := p.swagger.Paths.Paths["/test"]
+	assert.True(t, ok)
 	assert.Equal(t, "#/definitions/Teacher", path.Get.Parameters[0].Schema.Ref.String())
 	ref = path.Get.Responses.ResponsesProps.StatusCodeResponses[200].ResponseProps.Schema.Ref
 	assert.Equal(t, "#/definitions/Teacher", ref.String())
@@ -2328,7 +2350,6 @@ func TestParseJSONFieldString(t *testing.T) {
         "description": "This is a sample server.",
         "title": "Swagger Example API",
         "contact": {},
-        "license": {},
         "version": "1.0"
     },
     "host": "localhost:4000",
@@ -2408,8 +2429,51 @@ func TestParseJSONFieldString(t *testing.T) {
 	searchDir := "testdata/json_field_string"
 	mainAPIFile := "main.go"
 	p := New()
-	err := p.ParseAPI(searchDir, mainAPIFile)
+	err := p.ParseAPI(searchDir, mainAPIFile, defaultParseDepth)
 	assert.NoError(t, err)
 	b, _ := json.MarshalIndent(p.swagger, "", "    ")
 	assert.Equal(t, expected, string(b))
+}
+
+func TestParseSwaggerignoreForEmbedded(t *testing.T) {
+	src := `
+package main
+
+type Child struct {
+	ChildName string
+}//@name Student
+
+type Parent struct {
+	Name string
+	Child ` + "`swaggerignore:\"true\"`" + `
+}//@name Teacher
+
+// @Param request body Parent true "query params"
+// @Success 200 {object} Parent
+// @Router /test [get]
+func Fun()  {
+
+}
+`
+	f, err := goparser.ParseFile(token.NewFileSet(), "", src, goparser.ParseComments)
+	assert.NoError(t, err)
+
+	p := New()
+	p.packages.CollectAstFile("api", "api/api.go", f)
+	p.packages.ParseTypes()
+	err = p.ParseRouterAPIInfo("", f)
+	assert.NoError(t, err)
+
+	assert.NoError(t, err)
+	teacher, ok := p.swagger.Definitions["Teacher"]
+	assert.True(t, ok)
+
+	name, ok := teacher.Properties["name"]
+	assert.True(t, ok)
+	assert.Len(t, name.Type, 1)
+	assert.Equal(t, "string", name.Type[0])
+
+	childName, ok := teacher.Properties["childName"]
+	assert.False(t, ok)
+	assert.Empty(t, childName)
 }
